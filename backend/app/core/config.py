@@ -14,6 +14,15 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
 
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_starttls: bool = True
+    smtp_timeout_seconds: int = 10
+    smtp_from_name: str = ""
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
