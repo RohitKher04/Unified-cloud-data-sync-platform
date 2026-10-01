@@ -5,6 +5,7 @@ from typing import Any
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 import jwt
+import secrets
 
 from app.core.config import settings
 
@@ -21,6 +22,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return pwd_hasher.verify(hashed_password, plain_password)
     except (VerifyMismatchError, Exception):
         return False
+
+def generate_email_otp() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def hash_email_otp(otp: str) -> str:
+    return hash_password(otp)
+
+
+def verify_email_otp(otp: str, otp_hash: str) -> bool:
+    return verify_password(otp, otp_hash)
 
 
 def hash_token(token: str) -> str:

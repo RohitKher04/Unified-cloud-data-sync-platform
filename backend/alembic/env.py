@@ -12,6 +12,9 @@ from app.db.base import Base
 # access to the values within the .ini file in use.
 config = context.config
 
+from app.db.models.users import User
+from app.db.models.user_sessions import UserSession
+from app.db.models.pending_registrations import PendingRegistration
 
 escaped_url = settings.database_url.replace("%", "%%")
 config.set_main_option("sqlalchemy.url", escaped_url)

@@ -13,18 +13,27 @@ class UserRepository:
         stmt = select(User).where(User.email == email)
         return db.scalars(stmt).first()
 
-    def create(self, db: Session, user_in: UserCreate, password_hash: str) -> User:
-        user = User(
-            email=user_in.email,
-            password_hash=password_hash,
-            first_name=user_in.first_name,
-            last_name=user_in.last_name,
-            is_active=True,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        return user
+
+    def create_verified_user(
+        self,
+        db: Session,
+        *,
+        email: str,
+        password_hash: str,
+        first_name: str | None,
+        last_name: str | None,
+        ) -> User:
+            user = User(
+                email=email,
+                password_hash=password_hash,
+                first_name=first_name,
+                last_name=last_name,
+                is_active=True,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            return user
 
 
 user_repo = UserRepository()
