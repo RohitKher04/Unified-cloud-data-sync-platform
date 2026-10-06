@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     smtp_timeout_seconds: int = 10
     smtp_from_name: str = ""
 
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+    oauth_encryption_key: str = ""
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
