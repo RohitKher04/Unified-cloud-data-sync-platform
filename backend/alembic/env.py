@@ -18,6 +18,9 @@ from app.db.models.pending_registrations import PendingRegistration
 from app.db.models.integrations import Integration
 from app.db.models.integration_credentials import IntegrationCredential
 from app.db.models.oauth_states import OAuthState
+from app.db.models.emails import Email
+from app.db.models.sync_jobs import SyncJob
+from app.db.models.sync_cursors import SyncCursor
 
 escaped_url = settings.database_url.replace("%", "%%")
 config.set_main_option("sqlalchemy.url", escaped_url)

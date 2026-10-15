@@ -8,6 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 class Settings(BaseSettings):
     database_url: str
+    redis_url: str = "redis://localhost:6379/0"
 
     jwt_secret: str = "super-secret-dev-jwt-key-change-in-production-12345"
     jwt_algorithm: str = "HS256"
