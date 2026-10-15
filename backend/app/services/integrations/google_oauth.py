@@ -318,7 +318,7 @@ class GoogleOAuthService:
             client_id=settings.google_client_id,
             client_secret=settings.google_client_secret,
             scopes=credential.scopes,
-            expiry=expires_at,
+            expiry=expires_at.replace(tzinfo=None) if expires_at else None,
         )
     
 

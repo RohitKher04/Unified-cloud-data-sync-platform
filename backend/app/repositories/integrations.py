@@ -57,6 +57,17 @@ class IntegrationRepository:
         )
         return list(db.scalars(statement).all())
 
+    def get_by_id(
+        self,
+        db: Session,
+        *,
+        integration_id: int,
+    ) -> Integration | None:
+        statement = select(Integration).where(
+            Integration.id == integration_id,
+        )
+        return db.scalars(statement).first()
+
     def get_by_id_for_user(
         self,
         db: Session,
