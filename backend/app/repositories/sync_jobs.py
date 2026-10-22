@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.db.models.integrations import Integration
 from app.db.models.sync_jobs import SyncJob
 
 
@@ -84,6 +85,22 @@ class SyncJobRepository:
             SyncJob.status.in_(["queued", "running"]),
         )
         return db.scalars(statement).first()
+
+    def list_for_user(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        limit: int = 50,
+    ) -> list[SyncJob]:
+        statement = (
+            select(SyncJob)
+            .join(Integration, SyncJob.integration_id == Integration.id)
+            .where(Integration.user_id == user_id)
+            .order_by(SyncJob.created_at.desc())
+            .limit(limit)
+        )
+        return list(db.scalars(statement).all())
 
 
 sync_job_repo = SyncJobRepository()

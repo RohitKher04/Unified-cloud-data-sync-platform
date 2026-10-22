@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 
@@ -13,3 +14,5 @@ class IntegrationResponse(BaseModel):
     integration_type: str
     external_email: EmailStr
     status: str
+    last_synced_at: datetime | None = None
+    created_at: datetime | None = None

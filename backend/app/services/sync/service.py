@@ -239,4 +239,18 @@ class SyncService:
         return job
 
 
+    def list_jobs_for_user(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        limit: int = 50,
+    ) -> list[SyncJob]:
+        return sync_job_repo.list_for_user(
+            db,
+            user_id=user_id,
+            limit=limit,
+        )
+
+
 sync_service = SyncService()

@@ -29,6 +29,23 @@ def trigger_initial_sync(
 
 
 @router.get(
+    "/sync/jobs",
+    response_model=list[SyncJobResponse],
+)
+def list_sync_jobs(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[SyncJobResponse]:
+    jobs = sync_service.list_jobs_for_user(
+        db,
+        user_id=current_user.id,
+        limit=limit,
+    )
+    return [SyncJobResponse.model_validate(job) for job in jobs]
+
+
+@router.get(
     "/sync/jobs/{job_id}",
     response_model=SyncJobResponse,
 )
