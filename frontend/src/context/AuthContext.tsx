@@ -1,20 +1,16 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { authApi, tokenStorage } from '../api/client';
-import type { User } from '../types';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import type { User, TokenResponse } from '@/types';
+import { authApi } from '@/features/auth/api';
+import { tokenStorage, refreshAccessToken } from '@/lib/api-client';
 
 interface AuthContextType {
   user: User | null;
-  isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (data: {
-    email: string;
-    password: string;
-    first_name?: string;
-    last_name?: string;
-  }) => Promise<void>;
+  isLoading: boolean;
+  login: (tokens: TokenResponse) => Promise<User>;
   logout: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  setUserFromResponse: (user: User) => void;
+  bootstrapSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,80 +19,90 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const fetchProfile = async (): Promise<void> => {
-    const token = tokenStorage.getAccessToken();
-    if (!token) {
+  const bootstrapSession = useCallback(async () => {
+    const accessToken = tokenStorage.getAccessToken();
+    if (!accessToken) {
       setUser(null);
       setIsLoading(false);
       return;
     }
 
     try {
-      const profile = await authApi.getCurrentUser();
-      setUser(profile);
+      const userData = await authApi.getCurrentUser();
+      setUser(userData);
     } catch {
       tokenStorage.clearTokens();
       setUser(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProfile();
+    bootstrapSession();
 
-    const handleUnauthorized = () => {
+    // Listen for global 401 unrecoverable failures
+    const handleUnauthorized = (): void => {
       setUser(null);
+      tokenStorage.clearTokens();
     };
 
     window.addEventListener('auth:unauthorized', handleUnauthorized);
+
+    // Proactively refresh access token every 15 minutes to prevent session expiration during active use
+    const refreshInterval = setInterval(() => {
+      if (tokenStorage.getRefreshToken()) {
+        void refreshAccessToken();
+      }
+    }, 15 * 60 * 1000);
+
+    // Also refresh on tab visibility change if user returns to tab
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible' && tokenStorage.getRefreshToken()) {
+        void refreshAccessToken();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
+      clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [bootstrapSession]);
 
-  const login = async (email: string, password: string): Promise<void> => {
-    const tokens = await authApi.login(email, password);
+  const login = async (tokens: TokenResponse): Promise<User> => {
     tokenStorage.setTokens(tokens);
-    const profile = await authApi.getCurrentUser();
-    setUser(profile);
-  };
-
-  const register = async (data: {
-    email: string;
-    password: string;
-    first_name?: string;
-    last_name?: string;
-  }): Promise<void> => {
-    const tokens = await authApi.register(data);
-    tokenStorage.setTokens(tokens);
-    const profile = await authApi.getCurrentUser();
-    setUser(profile);
+    const userData = await authApi.getCurrentUser();
+    setUser(userData);
+    return userData;
   };
 
   const logout = async (): Promise<void> => {
-    const refreshToken = tokenStorage.getRefreshToken();
     try {
-      if (refreshToken) {
-        await authApi.logout(refreshToken);
-      }
+      await authApi.logout();
     } catch {
-      tokenStorage.clearTokens();
+      // Ignored - token cleared in finally
     } finally {
+      tokenStorage.clearTokens();
       setUser(null);
     }
+  };
+
+  const setUserFromResponse = (newUser: User): void => {
+    setUser(newUser);
   };
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        isLoading,
         isAuthenticated: !!user,
+        isLoading,
         login,
-        register,
         logout,
-        refreshProfile: fetchProfile,
+        setUserFromResponse,
+        bootstrapSession,
       }}
     >
       {children}
@@ -111,5 +117,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-export default AuthProvider;

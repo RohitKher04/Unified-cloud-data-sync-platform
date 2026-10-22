@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import delete, func, literal_column
+from sqlalchemy import delete, func, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -44,9 +44,10 @@ class EmailRepository:
                 constraint="uq_emails_integration_external_id",
                 set_=update_values,
             )
-            .returning(Email,
-                       literal_column("xmax = 0").label("inserted"),
-                       )
+            .returning(
+                Email,
+                literal_column("xmax = 0").label("inserted"),
+            )
         )
         email, inserted = db.execute(statement).one()
 
@@ -71,6 +72,72 @@ class EmailRepository:
         )
         result = db.execute(statement)
         return result.rowcount or 0
+
+    def get_by_id_for_user(
+        self,
+        db: Session,
+        *,
+        email_id: int,
+        user_id: int,
+    ) -> Email | None:
+        statement = select(Email).where(
+            Email.id == email_id,
+            Email.user_id == user_id,
+        )
+        return db.scalars(statement).first()
+
+    def list_for_user(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        limit: int = 50,
+        offset: int = 0,
+        q: str | None = None,
+        is_read: bool | None = None,
+        is_starred: bool | None = None,
+    ) -> tuple[list[Email], int]:
+        query = select(Email).where(Email.user_id == user_id)
+
+        if is_read is not None:
+            query = query.where(Email.is_read == is_read)
+        if is_starred is not None:
+            query = query.where(Email.is_starred == is_starred)
+        if q:
+            search = f"%{q}%"
+            query = query.where(
+                or_(
+                    Email.subject.ilike(search),
+                    Email.snippet.ilike(search),
+                    Email.sender.ilike(search),
+                )
+            )
+
+        total_stmt = select(func.count()).select_from(query.subquery())
+        total = db.scalar(total_stmt) or 0
+
+        stmt = (
+            query.order_by(Email.received_at.desc().nullslast())
+            .offset(offset)
+            .limit(limit)
+        )
+        items = list(db.scalars(stmt).all())
+        return items, total
+
+    def update_flags(
+        self,
+        db: Session,
+        *,
+        email: Email,
+        is_read: bool | None = None,
+        is_starred: bool | None = None,
+    ) -> Email:
+        if is_read is not None:
+            email.is_read = is_read
+        if is_starred is not None:
+            email.is_starred = is_starred
+        db.flush()
+        return email
 
 
 email_repo = EmailRepository()

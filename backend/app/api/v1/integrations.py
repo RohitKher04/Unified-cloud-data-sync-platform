@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api.v1.dependencies import get_current_user
@@ -28,10 +29,7 @@ def connect_google(
     return {"authorization_url": authorization_url}
 
 
-@router.get(
-    "/google/callback",
-    response_model=IntegrationResponse,
-)
+@router.get("/google/callback")
 def google_callback(
     state: str,
     code: str | None = None,
@@ -39,22 +37,21 @@ def google_callback(
     db: Session = Depends(get_db),
 ):
     if error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Google authorization was cancelled or denied.",
-        )
+        return RedirectResponse(url="http://localhost:5173/integrations?error=cancelled")
 
     if not code:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Google did not return an authorization code.",
-        )
+        return RedirectResponse(url="http://localhost:5173/integrations?error=no_code")
 
-    return google_oauth_service.complete_connection(
-        db,
-        code=code,
-        state=state,
-    )
+    try:
+        google_oauth_service.complete_connection(
+            db,
+            code=code,
+            state=state,
+        )
+        return RedirectResponse(url="http://localhost:5173/integrations?connected=true")
+    except Exception:
+        return RedirectResponse(url="http://localhost:5173/integrations?error=failed")
+
 
 
 @router.get(
