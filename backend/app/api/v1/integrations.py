@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
-
+from urllib.parse import quote
 from app.api.v1.dependencies import get_current_user
 from app.db.models.users import User
 from app.db.session import get_db
@@ -49,6 +49,9 @@ def google_callback(
             state=state,
         )
         return RedirectResponse(url="http://localhost:5173/integrations?connected=true")
+    except HTTPException as exc:
+        encoded_detail = quote(str(exc.detail))
+        return RedirectResponse(url=f"http://localhost:5173/integrations?error={encoded_detail}")
     except Exception:
         return RedirectResponse(url="http://localhost:5173/integrations?error=failed")
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/api-client';
 import {
   Sun,
   Moon,
@@ -45,7 +46,7 @@ export const SettingsPage: React.FC = () => {
       void qc.invalidateQueries({ queryKey: ['emails'] });
       setDisconnectId(null);
     },
-    onError: () => toast.error('Failed to disconnect integration.'),
+    onError: (err) => toast.error(getErrorMessage(err) || 'Failed to disconnect integration.'),
   });
 
   const displayName = user?.first_name
@@ -114,7 +115,7 @@ export const SettingsPage: React.FC = () => {
       </Card>
 
       {/* Security & Credentials Policy */}
-      <Card className="border-indigo-500/20 bg-indigo-500/[0.02]">
+      <Card className="border-indigo-500/20 bg-indigo-500/2">
         <CardHeader>
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />

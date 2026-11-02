@@ -40,12 +40,18 @@ export const syncApi = {
     const res = await apiClient.get<SyncJob>(`/sync/jobs/${jobId}`);
     return res.data;
   },
+
+  cancelJob: async (jobId: number): Promise<SyncJob> => {
+    const res = await apiClient.post<SyncJob>(`/sync/jobs/${jobId}/cancel`);
+    return res.data;
+  },
 };
 
 export const emailApi = {
   list: async (params?: {
     limit?: number;
     offset?: number;
+    integration_id?: number;
     q?: string;
     is_read?: boolean;
     is_starred?: boolean;

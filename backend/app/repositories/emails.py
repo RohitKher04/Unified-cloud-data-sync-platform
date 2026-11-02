@@ -91,6 +91,7 @@ class EmailRepository:
         db: Session,
         *,
         user_id: int,
+        integration_id : int | None = None,
         limit: int = 50,
         offset: int = 0,
         q: str | None = None,
@@ -98,6 +99,9 @@ class EmailRepository:
         is_starred: bool | None = None,
     ) -> tuple[list[Email], int]:
         query = select(Email).where(Email.user_id == user_id)
+
+        if integration_id is not None:
+            query = query.where(Email.integration_id == integration_id)
 
         if is_read is not None:
             query = query.where(Email.is_read == is_read)

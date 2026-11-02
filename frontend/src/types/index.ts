@@ -26,6 +26,7 @@ export interface GoogleConnectResponse {
 export type IntegrationStatus = 'connected' | 'disconnected' | 'error' | 'pending';
 
 export interface Integration {
+  external_account_id: string;
   id: number;
   provider: string;
   integration_type: string;
@@ -58,6 +59,8 @@ export interface SyncJobQueued {
 }
 
 export interface EmailListItem {
+  sender_email: any;
+  sender_name: any;
   id: number;
   integration_id: number;
   external_id: string;

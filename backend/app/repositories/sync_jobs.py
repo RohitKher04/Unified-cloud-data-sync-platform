@@ -74,6 +74,19 @@ class SyncJobRepository:
         job.records_updated = records_updated
         db.flush()
 
+
+    def mark_cancelled(
+        self,
+        db: Session,
+        job: SyncJob,
+    ) -> None:
+        job.status = "cancelled"
+        job.completed_at = datetime.now(timezone.utc)
+        job.error_code = "SYNC_CANCELLED"
+        job.error_message = "Sync was cancelled by user."
+        db.flush()
+
+        
     def get_active_job_for_integration(
         self,
         db: Session,

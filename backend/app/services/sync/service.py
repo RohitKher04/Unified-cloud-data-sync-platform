@@ -26,10 +26,12 @@ class SyncService:
 
         if job is None:
             raise ValueError("Sync job was not found.")
-        if job.job_type != "initial":
-            raise ValueError("This service currently supports initial sync only.")
-        if job.status not in {"queued", "failed"}:
-            raise ValueError("This sync job is not ready to run.")
+        if job.job_type not in {"initial", "incremental"}:
+            raise ValueError(f"Unsupported sync job type: {job.job_type}")
+        if job.status not in {"queued", "running", "failed"}:
+            raise ValueError(
+                f"This sync job is not ready to run (current status: {job.status})."
+            )
 
         integration = integration_repo.get_by_id(
             db,
@@ -75,20 +77,45 @@ class SyncService:
             records = iter(result.records)
             try:
                 for email_data in records:
+                    if records_processed % 25 == 0:
+                        db.refresh(job)
+                        if job.status == "cancelled":
+                            break
+
                     _, created = email_repo.upsert(db, email_data)
 
                     records_processed += 1
+                    
                     if created:
                         records_created += 1
                     else:
                         records_updated += 1
 
-                    if records_processed % 100 == 0:
+                    if records_processed % 50 == 0:
+                        job.records_processed = records_processed
+                        job.records_created = records_created
+                        job.records_updated = records_updated
                         db.commit()
             finally:
                 close_records = getattr(records, "close", None)
                 if close_records is not None:
                     close_records()
+
+            db.refresh(job)
+            if job.status == "cancelled":
+                job.records_processed = records_processed
+                job.records_created = records_created
+                job.records_updated = records_updated
+                db.commit()
+                return job
+
+            if result.deleted_external_ids:
+                deleted_count = email_repo.delete_by_external_ids(
+                    db,
+                    integration_id=integration.id,
+                    external_ids=list(result.deleted_external_ids),
+                )
+                records_processed += deleted_count
 
             completed_at = datetime.now(timezone.utc)
 
@@ -114,18 +141,27 @@ class SyncService:
             db.refresh(job)
             return job
 
-        except Exception:
+        except Exception as exc:
             db.rollback()
 
             failed_job = sync_job_repo.get_by_id(db, job_id=job_id)
             if failed_job is not None:
+                err_str = str(exc).lower()
+
+                if "invalid_grant" in err_str or "token" in err_str or "unauthorized" in err_str:
+                    clean_msg = "Google authorization expired or was revoked. Please reconnect your account."
+                elif "quota" in err_str or "rate" in err_str or "429" in err_str:
+                    clean_msg = "Google API rate limit reached. Sync will resume shortly."
+                elif "timeout" in err_str or "connection" in err_str:
+                    clean_msg = "Connection to Google timed out. Please check your network."
+                else:
+                    clean_msg = f"{job.job_type.capitalize()} sync encountered an issue. Please try again."
+
                 sync_job_repo.mark_failed(
                     db,
                     failed_job,
-                    error_code="INITIAL_SYNC_FAILED",
-                    error_message=(
-                        "Initial sync failed. Check server logs for details."
-                    ),
+                    error_code="SYNC_FAILED",
+                    error_message=clean_msg,
                     records_processed=records_processed,
                     records_created=records_created,
                     records_updated=records_updated,
@@ -177,10 +213,18 @@ class SyncService:
         if active_job is not None:
             return active_job
 
+        # If cursor already exists, this is an incremental sync; otherwise initial
+        cursor = sync_cursor_repo.get(
+            db,
+            integration_id=integration.id,
+            resource_type=integration.integration_type,
+        )
+        job_type = "incremental" if (cursor and cursor.cursor_value) else "initial"
+
         job = sync_job_repo.create(
             db,
             integration_id=integration.id,
-            job_type="initial",
+            job_type=job_type,
         )
         db.commit()
         db.refresh(job)
@@ -199,7 +243,7 @@ class SyncService:
                     db,
                     failed_job,
                     error_code="TASK_ENQUEUE_FAILED",
-                    error_message="Could not queue the sync job.",
+                    error_message="Could not queue the sync job. Try again later",
                 )
                 db.commit()
 
@@ -251,6 +295,24 @@ class SyncService:
             user_id=user_id,
             limit=limit,
         )
+    
+    def cancel_active_job(
+        self,
+        db: Session,
+        *,
+        job_id: int,
+        user_id: int,
+    ) -> SyncJob:
+        job = self.get_job_for_user(db, job_id=job_id, user_id=user_id)
+        if job.status not in {"queued", "running"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot cancel job with status '{job.status}'.",
+            )
+        sync_job_repo.mark_cancelled(db, job)
+        db.commit()
+        db.refresh(job)
+        return job
 
 
 sync_service = SyncService()

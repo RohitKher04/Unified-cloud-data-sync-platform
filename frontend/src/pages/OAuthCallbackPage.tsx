@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { CheckCircle2, XCircle, Loader2, Zap } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, getErrorMessage } from '@/lib/api-client';
 import type { Integration } from '@/types';
 import { queryClient } from '@/lib/query-client';
 
@@ -14,14 +14,23 @@ export const OAuthCallbackPage: React.FC = () => {
   const [state, setState] = useState<State>('loading');
   const [message, setMessage] = useState('');
 
+  // Guard against React StrictMode running this effect twice
+  const hasRun = useRef(false);
+
   useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
+
     const code = searchParams.get('code');
     const stateParam = searchParams.get('state');
     const error = searchParams.get('error');
 
     if (error) {
       setState('error');
-      setMessage('Google authorization was cancelled or denied. Please try again.');
+      setMessage('Google authorization failed. Start the connection again.');
+      toast.error('Google authorization failed. Start the connection again.', {
+        id: 'oauth-error',
+      });
       setTimeout(() => navigate('/integrations', { replace: true }), 3000);
       return;
     }
@@ -29,6 +38,9 @@ export const OAuthCallbackPage: React.FC = () => {
     if (!code || !stateParam) {
       setState('error');
       setMessage('Invalid OAuth response. Missing required parameters.');
+      toast.error('Invalid OAuth response. Missing required parameters.', {
+        id: 'oauth-error',
+      });
       setTimeout(() => navigate('/integrations', { replace: true }), 3000);
       return;
     }
@@ -41,17 +53,15 @@ export const OAuthCallbackPage: React.FC = () => {
       .then((res) => {
         setState('success');
         setMessage(`${res.data.external_email} connected successfully!`);
-        // Invalidate integrations query so dashboard/integrations refresh
         void queryClient.invalidateQueries({ queryKey: ['integrations'] });
-        toast.success('Google account connected!');
+        toast.success('Google account connected!', { id: 'oauth-success' });
         setTimeout(() => navigate('/integrations', { replace: true }), 2000);
       })
       .catch((err: unknown) => {
-        const msg =
-          err instanceof Error ? err.message : 'Failed to complete Google authorization.';
+        const msg = getErrorMessage(err);
         setState('error');
         setMessage(msg);
-        toast.error(msg);
+        toast.error(msg, { id: 'oauth-error' });
         setTimeout(() => navigate('/integrations', { replace: true }), 3500);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,7 +71,7 @@ export const OAuthCallbackPage: React.FC = () => {
     <div className="flex min-h-screen items-center justify-center bg-background p-6">
       <div className="flex flex-col items-center gap-6 text-center max-w-sm w-full">
         {/* Logo */}
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/25">
           <Zap className="h-6 w-6 text-white" />
         </div>
 

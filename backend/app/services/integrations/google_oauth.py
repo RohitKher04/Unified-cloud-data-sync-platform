@@ -130,7 +130,6 @@ class GoogleOAuthService:
                 detail="Google did not return a Gmail address.",
             )
 
-        #check for duplicate connecction calles
         existing = integration_repo.get_by_account(
             db,
             user_id=user_id,
@@ -138,7 +137,7 @@ class GoogleOAuthService:
             integration_type="gmail",
             external_account_id=email,
         )
-        if existing:
+        if existing and existing.status == "connected":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This Gmail account is already connected.",
@@ -155,9 +154,44 @@ class GoogleOAuthService:
             or [GMAIL_READ_SCOPE]
         )
 
+        enc_access_token = encrypt_token(credentials.token)
+        enc_refresh_token = (
+            encrypt_token(credentials.refresh_token)
+            if credentials.refresh_token
+            else None
+        )
 
-        #Save two rows to the database(in one trasaction)
         try:
+            if existing:
+                # Reconnecting a previously disconnected account:
+                # Reactivate the status and save fresh credentials while keeping all existing emails
+                existing.status = "connected"
+                existing.external_email = email
+
+                existing_cred = integration_credential_repo.get_by_integration_id(
+                    db, existing.id
+                )
+                if existing_cred:
+                    existing_cred.encrypted_access_token = enc_access_token
+                    if enc_refresh_token:
+                        existing_cred.encrypted_refresh_token = enc_refresh_token
+                    existing_cred.expires_at = token_expiry
+                    existing_cred.scopes = scopes
+                else:
+                    integration_credential_repo.create(
+                        db,
+                        integration_id=existing.id,
+                        encrypted_access_token=enc_access_token,
+                        encrypted_refresh_token=enc_refresh_token,
+                        expires_at=token_expiry,
+                        scopes=scopes,
+                    )
+
+                db.commit()
+                db.refresh(existing)
+                return existing
+
+            
             integration = integration_repo.create(
                 db,
                 user_id=user_id,
@@ -170,16 +204,15 @@ class GoogleOAuthService:
             integration_credential_repo.create(
                 db,
                 integration_id=integration.id,
-                encrypted_access_token=encrypt_token(credentials.token),
-                encrypted_refresh_token=encrypt_token(
-                    credentials.refresh_token
-                ),
+                encrypted_access_token=enc_access_token,
+                encrypted_refresh_token=enc_refresh_token,
                 expires_at=token_expiry,
                 scopes=scopes,
             )
 
             db.commit()
             db.refresh(integration)
+            return integration
 
         except IntegrityError as exc:
             db.rollback()
@@ -187,8 +220,6 @@ class GoogleOAuthService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This Gmail account is already connected.",
             ) from exc
-
-        return integration
 
     def list_for_user(
         self,
@@ -374,15 +405,21 @@ class GoogleOAuthService:
                     detail="Google access could not be revoked. Try disconnecting again.",
                 ) from exc
 
+        # OUTSIDE of `if credential is not None:` so it always runs
         try:
             if credential is not None:
                 db.delete(credential)
 
-            db.delete(integration)
+            if integration.status == "disconnected":
+                # Already disconnected: permanently delete integration (cascades to all emails & jobs)
+                db.delete(integration)
+            else:
+                # Active: soft-disconnect and preserve synced emails
+                integration.status = "disconnected"
+
             db.commit()
         except Exception:
             db.rollback()
-            raise    
-
+            raise
 
 google_oauth_service = GoogleOAuthService()

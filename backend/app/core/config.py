@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     google_redirect_uri: str = ""
     oauth_encryption_key: str = ""
 
+    gmail_initial_sync_max_messages: int = 0
+
     model_config = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",

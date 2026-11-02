@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 
@@ -19,10 +19,6 @@ export const LoginPage: React.FC = () => {
   const [serverError, setServerError] = useState<string | null>(null);
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const from =
-    (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard';
 
   const {
     register,
@@ -38,7 +34,8 @@ export const LoginPage: React.FC = () => {
       const tokens = await authApi.login(data);
       await login(tokens);
       toast.success('Welcome back!');
-      navigate(from, { replace: true });
+      // Always open Dashboard page upon login
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setServerError(getErrorMessage(err));
     }
