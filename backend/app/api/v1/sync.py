@@ -60,3 +60,19 @@ def get_sync_job(
         user_id=current_user.id,
     )
     return SyncJobResponse.model_validate(job)
+
+@router.post(
+    "/sync/jobs/{job_id}/cancel",
+    response_model=SyncJobResponse,
+)
+def cancel_sync_job(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SyncJobResponse:
+    job = sync_service.cancel_active_job(
+        db,
+        job_id=job_id,
+        user_id=current_user.id,
+    )
+    return SyncJobResponse.model_validate(job)

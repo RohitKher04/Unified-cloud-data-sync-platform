@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Eye, EyeOff, UserPlus, ShieldCheck, RotateCcw } from 'lucide-react';
+import { Eye, EyeOff, UserPlus, ShieldCheck, RotateCcw, ArrowRight } from 'lucide-react';
 
 import {
   registerSchema,
@@ -42,6 +42,7 @@ export const RegisterPage: React.FC = () => {
   });
 
   const passwordValue = watch('password', '');
+  const emailValue = watch('email', '');
 
   const onRegister = async (data: RegisterFormData): Promise<void> => {
     setServerError(null);
@@ -51,6 +52,7 @@ export const RegisterPage: React.FC = () => {
       setStep('otp');
       toast.success('Verification code sent to your email.');
     } catch (err) {
+      setPendingEmail(data.email);
       setServerError(getErrorMessage(err));
     }
   };
@@ -172,10 +174,47 @@ export const RegisterPage: React.FC = () => {
           </p>
         </div>
 
+        {/* Resume verification banner if an OTP code is already pending */}
+        {pendingEmail && (
+          <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5 text-sm">
+            <span className="text-xs text-muted-foreground truncate">
+              Code already sent to <strong className="text-foreground">{pendingEmail}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setStep('otp');
+                setServerError(null);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline underline-offset-4 shrink-0 ml-2"
+            >
+              Enter code
+              <ArrowRight className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
         {serverError && (
-          <div role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive">
-            <span className="mt-0.5">⚠️</span>
-            <span>{serverError}</span>
+          <div role="alert" className="flex items-start justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5">⚠️</span>
+              <span>{serverError}</span>
+            </div>
+            {/* If error is about pending verification, give direct button back to OTP screen */}
+            {serverError.toLowerCase().includes('pending') && (
+              <button
+                type="button"
+                onClick={() => {
+                  const targetEmail = emailValue || pendingEmail;
+                  if (targetEmail) setPendingEmail(targetEmail);
+                  setStep('otp');
+                  setServerError(null);
+                }}
+                className="shrink-0 text-xs font-semibold text-primary underline underline-offset-4 hover:text-primary/80 whitespace-nowrap"
+              >
+                Enter code →
+              </button>
+            )}
           </div>
         )}
 
@@ -229,7 +268,7 @@ export const RegisterPage: React.FC = () => {
                 id="reg-password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                placeholder="Min. 8 characters"
+                placeholder="Create a strong password"
                 className="pr-11"
                 aria-invalid={!!errors.password}
                 {...register('password')}

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import type { User, TokenResponse } from '@/types';
 import { authApi } from '@/features/auth/api';
 import { tokenStorage, refreshAccessToken } from '@/lib/api-client';
+import { queryClient } from '@/lib/query-client';
 
 interface AuthContextType {
   user: User | null;
@@ -32,6 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(userData);
     } catch {
       tokenStorage.clearTokens();
+      queryClient.clear();
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -43,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Listen for global 401 unrecoverable failures
     const handleUnauthorized = (): void => {
+      queryClient.clear();
       setUser(null);
       tokenStorage.clearTokens();
     };
@@ -56,22 +59,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }, 15 * 60 * 1000);
 
-    // Also refresh on tab visibility change if user returns to tab
-    const handleVisibilityChange = (): void => {
-      if (document.visibilityState === 'visible' && tokenStorage.getRefreshToken()) {
-        void refreshAccessToken();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
     return () => {
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
       clearInterval(refreshInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [bootstrapSession]);
 
   const login = async (tokens: TokenResponse): Promise<User> => {
+    queryClient.clear();
     tokenStorage.setTokens(tokens);
     const userData = await authApi.getCurrentUser();
     setUser(userData);
@@ -84,6 +79,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // Ignored - token cleared in finally
     } finally {
+      queryClient.clear();
       tokenStorage.clearTokens();
       setUser(null);
     }

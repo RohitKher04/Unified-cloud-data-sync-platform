@@ -63,8 +63,6 @@ def _collect_bodies(
     part: dict[str, Any],
     bodies: dict[str, list[str]],
 ) -> None:
-    # Message attachments are synchronized separately; don't store their data
-    # as the email body.
     if part.get("filename"):
         return
 

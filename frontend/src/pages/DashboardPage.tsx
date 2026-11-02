@@ -54,9 +54,9 @@ function StatCard({
 
 function ConnectHero(): React.JSX.Element {
   return (
-    <Card className="border-dashed bg-gradient-to-br from-indigo-500/5 via-violet-500/5 to-transparent">
+    <Card className="border-dashed bg-linear-to-br from-indigo-500/5 via-violet-500/5 to-transparent">
       <CardContent className="p-8 flex flex-col items-center text-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-violet-500/20 text-primary ring-8 ring-primary/5">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500/20 to-violet-500/20 text-primary ring-8 ring-primary/5">
           <Zap className="h-8 w-8" />
         </div>
         <div>
@@ -93,39 +93,45 @@ export const DashboardPage: React.FC = () => {
   });
 
   const { data: syncJobs, isLoading: loadingJobs } = useQuery({
-    queryKey: ['sync-jobs'],
+    queryKey: ['sync-jobs', 'dashboard'],
     queryFn: () => syncApi.listJobs(),
     refetchInterval: (query) => {
       const latest = query.state.data?.[0];
       if (latest?.status === 'queued' || latest?.status === 'running') {
         return 3000;
       }
-      return false;
+      return 8000;
     },
   });
 
   const hasIntegrations = (integrations?.length ?? 0) > 0;
+  const latestJob = syncJobs?.[0];
+  const isSyncRunning = latestJob?.status === 'queued' || latestJob?.status === 'running';
 
+  // Live polling for total emails and unread count during active sync
   const { data: emailData, isLoading: loadingEmails } = useQuery({
     queryKey: ['emails-recent'],
     queryFn: () => emailApi.list({ limit: 5 }),
     enabled: hasIntegrations,
+    refetchInterval: isSyncRunning ? 3000 : false,
   });
 
   const { data: unreadEmailData } = useQuery({
     queryKey: ['emails-unread-count'],
     queryFn: () => emailApi.list({ is_read: false, limit: 1 }),
     enabled: hasIntegrations,
+    refetchInterval: isSyncRunning ? 3000 : false,
   });
 
-  const latestJob = syncJobs?.[0];
-  const isSyncRunning = latestJob?.status === 'queued' || latestJob?.status === 'running';
-
-  // Automatically refresh email counts and integrations when a sync job finishes
+  // Automatically refresh email counts and integrations when a sync job finishes or cancels
   const prevJobStatus = useRef(latestJob?.status);
   useEffect(() => {
     if (prevJobStatus.current !== latestJob?.status) {
-      if (latestJob?.status === 'completed' || latestJob?.status === 'failed') {
+      if (
+        latestJob?.status === 'completed' ||
+        latestJob?.status === 'failed' ||
+        latestJob?.status === 'cancelled'
+      ) {
         void qc.invalidateQueries({ queryKey: ['emails-recent'] });
         void qc.invalidateQueries({ queryKey: ['emails-unread-count'] });
         void qc.invalidateQueries({ queryKey: ['integrations'] });
@@ -134,7 +140,6 @@ export const DashboardPage: React.FC = () => {
     }
   }, [latestJob?.status, qc]);
 
-  // If no integrations are connected, totalEmails MUST be 0 and recentEmails empty
   const totalEmails = hasIntegrations ? (emailData?.total ?? 0) : 0;
   const unreadEmails = hasIntegrations ? (unreadEmailData?.total ?? 0) : 0;
   const recentEmails = hasIntegrations ? (emailData?.items ?? []) : [];
@@ -157,7 +162,7 @@ export const DashboardPage: React.FC = () => {
             icon={<Mail className="h-5 w-5" />}
             label="Total Emails"
             value={totalEmails.toLocaleString()}
-            sub="All synced messages"
+            sub={isSyncRunning ? 'Syncing new emails…' : 'All synced messages'}
             accent={totalEmails > 0}
           />
           <StatCard
@@ -294,7 +299,7 @@ export const DashboardPage: React.FC = () => {
                       className="flex items-center gap-3 px-6 py-3 hover:bg-muted/40 transition-colors"
                     >
                       {/* Avatar */}
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500/20 to-violet-500/20 text-xs font-semibold text-primary">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500/20 to-violet-500/20 text-xs font-semibold text-primary">
                         {initials}
                       </div>
                       <div className="flex-1 min-w-0">

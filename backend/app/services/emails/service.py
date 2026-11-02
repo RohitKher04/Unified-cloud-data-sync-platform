@@ -16,6 +16,7 @@ class EmailService:
         db: Session,
         *,
         user_id: int,
+        integration_id: int | None = None,
         limit: int = 50,
         offset: int = 0,
         q: str | None = None,
@@ -25,6 +26,7 @@ class EmailService:
         items, total = email_repo.list_for_user(
             db,
             user_id=user_id,
+            integration_id=integration_id,
             limit=limit,
             offset=offset,
             q=q,

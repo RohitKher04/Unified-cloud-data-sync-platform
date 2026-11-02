@@ -18,6 +18,7 @@ router = APIRouter()
 def list_emails(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    integration_id: int | None = Query(default=None),
     q: str | None = Query(default=None),
     is_read: bool | None = Query(default=None),
     is_starred: bool | None = Query(default=None),
@@ -27,6 +28,7 @@ def list_emails(
     return email_service.list_emails_for_user(
         db,
         user_id=current_user.id,
+        integration_id=integration_id,
         limit=limit,
         offset=offset,
         q=q,

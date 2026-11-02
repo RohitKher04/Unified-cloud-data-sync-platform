@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -7,11 +7,13 @@ import {
   CheckCircle2,
   XCircle,
   Layers,
+  StopCircle,
 } from 'lucide-react';
 
 import { syncApi, integrationApi } from '@/lib/api';
 import { getErrorMessage } from '@/lib/api-client';
 import { formatRelativeTime, formatDuration } from '@/lib/formatters';
+import type { SyncJob } from '@/types';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { SkeletonRow, SkeletonCard } from '@/components/shared/Skeleton';
@@ -21,13 +23,17 @@ import { cn } from '@/lib/utils';
 
 export const SyncActivityPage: React.FC = () => {
   const qc = useQueryClient();
+  const [selectedSyncIntegrationId, setSelectedSyncIntegrationId] = useState<number | null>(null);
 
   const { data: integrations } = useQuery({
     queryKey: ['integrations'],
     queryFn: integrationApi.list,
   });
 
-  const primaryIntegration = integrations?.find((i) => i.status === 'connected') || integrations?.[0];
+  const connectedIntegrations = integrations?.filter((i) => i.status === 'connected') || [];
+  const activeIntegration =
+    connectedIntegrations.find((i) => i.id === selectedSyncIntegrationId) ||
+    connectedIntegrations[0];
 
   const {
     data: syncJobs,
@@ -41,18 +47,32 @@ export const SyncActivityPage: React.FC = () => {
       const hasActive = query.state.data?.some(
         (j) => j.status === 'queued' || j.status === 'running'
       );
-      return hasActive ? 3000 : false;
+      return hasActive ? 3000 : 8000;
     },
   });
 
   const syncMutation = useMutation({
     mutationFn: () => {
-      if (!primaryIntegration) throw new Error('No connected integration available.');
-      return syncApi.trigger(primaryIntegration.id);
+      if (!activeIntegration) throw new Error('No connected integration available.');
+      return syncApi.trigger(activeIntegration.id);
     },
     onSuccess: () => {
-      toast.success('Sync job queued!');
+      toast.success(`Sync queued for ${activeIntegration?.external_email}!`);
       void qc.invalidateQueries({ queryKey: ['sync-jobs'] });
+    },
+    onError: (err) => toast.error(getErrorMessage(err)),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (jobId: number) => syncApi.cancelJob(jobId),
+    onSuccess: (_, jobId) => {
+      toast.info('Sync job cancelled.');
+      // Instantly update cache for 0ms visual feedback
+      qc.setQueryData(['sync-jobs'], (old: SyncJob[] | undefined) =>
+        old ? old.map((j) => (j.id === jobId ? { ...j, status: 'cancelled' } : j)) : undefined
+      );
+      void qc.invalidateQueries({ queryKey: ['sync-jobs'] });
+      void qc.invalidateQueries({ queryKey: ['integrations'] });
     },
     onError: (err) => toast.error(getErrorMessage(err)),
   });
@@ -62,13 +82,15 @@ export const SyncActivityPage: React.FC = () => {
   const failedCount = jobs.filter((j) => j.status === 'failed').length;
   const activeCount = jobs.filter((j) => j.status === 'queued' || j.status === 'running').length;
 
+  const currentRunningJob = jobs.find((j) => j.status === 'queued' || j.status === 'running');
+
   return (
     <div className="space-y-6 max-w-5xl">
       <PageHeader
         title="Sync Activity"
         description="Monitor background synchronization tasks, job statuses, and record processing history."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
               size="sm"
@@ -79,18 +101,50 @@ export const SyncActivityPage: React.FC = () => {
               <RefreshCw className={cn('h-3.5 w-3.5', isFetching && 'animate-spin')} />
               Refresh
             </Button>
-            {primaryIntegration && (
-              <Button
-                size="sm"
-                onClick={() => syncMutation.mutate()}
-                isLoading={syncMutation.isPending || activeCount > 0}
-                className="gap-2 text-xs"
+
+            {/* Account Selector if multiple accounts exist */}
+            {connectedIntegrations.length > 1 && (
+              <select
+                value={activeIntegration?.id ?? ''}
+                onChange={(e) => setSelectedSyncIntegrationId(Number(e.target.value))}
+                className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium text-foreground shadow-xs cursor-pointer focus:outline-hidden focus:ring-1 focus:ring-primary"
               >
-                {!syncMutation.isPending && activeCount === 0 && (
-                  <RefreshCw className="h-3.5 w-3.5" />
+                {connectedIntegrations.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    Sync: {i.external_email}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {activeIntegration && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="sm"
+                  onClick={() => syncMutation.mutate()}
+                  isLoading={syncMutation.isPending || activeCount > 0}
+                  className="gap-2 text-xs"
+                >
+                  {!syncMutation.isPending && activeCount === 0 && (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  {activeCount > 0 ? 'Sync in Progress' : 'Sync Now'}
+                </Button>
+
+                {/* Header Cancel Button when a sync is running */}
+                {activeCount > 0 && currentRunningJob && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => cancelMutation.mutate(currentRunningJob.id)}
+                    disabled={cancelMutation.isPending}
+                    className="gap-1.5 text-xs text-destructive hover:bg-destructive/10 hover:border-destructive/30"
+                  >
+                    <StopCircle className="h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
                 )}
-                {activeCount > 0 ? 'Sync in Progress' : 'Sync Now'}
-              </Button>
+              </div>
             )}
           </div>
         }
@@ -189,15 +243,16 @@ export const SyncActivityPage: React.FC = () => {
             </div>
           ) : (
             <div className="divide-y divide-border/60">
-              {jobs.map((job) => {
+              {jobs.map((job, index) => {
                 const isActive = job.status === 'queued' || job.status === 'running';
+                const jobIntegration = integrations?.find((i) => i.id === job.integration_id);
 
                 return (
                   <div
                     key={job.id}
                     className={cn(
                       'flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:px-6 transition-colors duration-150 hover:bg-muted/30',
-                      isActive && 'bg-primary/[0.02]'
+                      isActive && 'bg-primary/2'
                     )}
                   >
                     {/* Status & Job Info */}
@@ -207,13 +262,21 @@ export const SyncActivityPage: React.FC = () => {
                       </div>
 
                       <div className="space-y-0.5 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-semibold text-foreground capitalize">
                             {job.job_type || 'Initial'} Sync
                           </span>
                           <span className="text-xs font-mono text-muted-foreground">
-                            #{job.id}
+                            Run #{jobs.length - index}
                           </span>
+
+                          {/* Account email badge */}
+                          {jobIntegration && (
+                            <span className="text-[11px] font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border/50">
+                              {jobIntegration.external_email}
+                            </span>
+                          )}
+
                           {isActive && (
                             <RefreshCw className="h-3 w-3 animate-spin text-primary shrink-0" />
                           )}
@@ -234,7 +297,7 @@ export const SyncActivityPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Stats pills */}
+                    {/* Stats pills & Cancel action */}
                     <div className="flex items-center gap-3 shrink-0 text-xs">
                       <div className="rounded-lg bg-muted/50 px-2.5 py-1 text-center">
                         <span className="font-bold text-foreground tabular-nums">
@@ -260,6 +323,20 @@ export const SyncActivityPage: React.FC = () => {
                       <span className="text-muted-foreground font-mono tabular-nums text-[11px] w-14 text-right">
                         {formatDuration(job.started_at, job.completed_at)}
                       </span>
+
+                      {/* Cancel button directly on running job rows */}
+                      {isActive && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => cancelMutation.mutate(job.id)}
+                          disabled={cancelMutation.isPending}
+                          className="h-7 px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:border-destructive/30 shrink-0 gap-1 ml-1"
+                        >
+                          <StopCircle className="h-3.5 w-3.5" />
+                          Cancel
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );

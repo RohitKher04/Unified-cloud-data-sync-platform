@@ -20,6 +20,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 
 const NAV_ITEMS = [
   { to: '/dashboard', icon: <LayoutDashboard className="h-4.5 w-4.5" />, label: 'Overview' },
@@ -31,42 +32,53 @@ const NAV_ITEMS = [
 
 function ThemeToggle(): React.JSX.Element {
   const { theme, setTheme } = useTheme();
-  const themes = [
-    { value: 'light' as const, icon: <Sun className="h-3.5 w-3.5" /> },
-    { value: 'dark' as const, icon: <Moon className="h-3.5 w-3.5" /> },
-    { value: 'system' as const, icon: <Monitor className="h-3.5 w-3.5" /> },
-  ];
 
   return (
-    <div className="flex items-center gap-0.5 rounded-lg border border-border bg-muted/50 p-0.5">
-      {themes.map(({ value, icon }) => (
-        <button
-          key={value}
-          onClick={() => setTheme(value)}
-          title={value.charAt(0).toUpperCase() + value.slice(1)}
-          className={cn(
-            'flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150',
-            theme === value
-              ? 'bg-background text-foreground shadow-xs'
-              : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {icon}
-        </button>
-      ))}
+    <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
+      <button
+        onClick={() => setTheme('light')}
+        title="Light theme"
+        className={cn(
+          'rounded-md p-1.5 text-muted-foreground transition-all duration-150',
+          theme === 'light' ? 'bg-background text-foreground shadow-xs' : 'hover:text-foreground'
+        )}
+      >
+        <Sun className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={() => setTheme('dark')}
+        title="Dark theme"
+        className={cn(
+          'rounded-md p-1.5 text-muted-foreground transition-all duration-150',
+          theme === 'dark' ? 'bg-background text-foreground shadow-xs' : 'hover:text-foreground'
+        )}
+      >
+        <Moon className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={() => setTheme('system')}
+        title="System theme"
+        className={cn(
+          'rounded-md p-1.5 text-muted-foreground transition-all duration-150',
+          theme === 'system' ? 'bg-background text-foreground shadow-xs' : 'hover:text-foreground'
+        )}
+      >
+        <Monitor className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
 
-function UserAvatar({ name, email }: { name?: string | null; email?: string | null }): React.JSX.Element {
-  const cleanName = (name || '').trim();
-  const cleanEmail = (email || '').trim();
-  const initials = cleanName
-    ? cleanName.split(/\s+/).map((n) => n[0]).filter(Boolean).join('').slice(0, 2).toUpperCase()
-    : cleanEmail.slice(0, 2).toUpperCase() || 'U';
+function UserAvatar({ name, email }: { name: string; email: string }): React.JSX.Element {
+  const initials = (name || email || 'U')
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-bold text-white shadow-sm">
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-violet-600 text-xs font-semibold text-white shadow-xs">
       {initials}
     </div>
   );
@@ -78,6 +90,7 @@ export const DashboardLayout: React.FC = () => {
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Close mobile drawer on route change
   useEffect(() => {
@@ -90,6 +103,7 @@ export const DashboardLayout: React.FC = () => {
 
   const handleLogout = async (): Promise<void> => {
     try {
+      setShowLogoutConfirm(false);
       await logout();
       navigate('/login', { replace: true });
     } catch {
@@ -101,7 +115,7 @@ export const DashboardLayout: React.FC = () => {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={cn('flex items-center gap-3 px-4 py-5 border-b border-border', collapsed && 'justify-center px-2')}>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-sm">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-indigo-500 to-violet-600 shadow-xs">
           <Zap className="h-4 w-4 text-white" />
         </div>
         {!collapsed && (
@@ -145,10 +159,10 @@ export const DashboardLayout: React.FC = () => {
         )}
 
         <button
-          onClick={handleLogout}
+          onClick={() => setShowLogoutConfirm(true)}
           title="Sign out"
           className={cn(
-            'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-150',
+            'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-150 cursor-pointer',
             collapsed && 'justify-center px-2'
           )}
         >
@@ -163,39 +177,39 @@ export const DashboardLayout: React.FC = () => {
   const currentPage = NAV_ITEMS.find((n) => location.pathname.startsWith(n.to))?.label ?? 'Dashboard';
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
       {/* ── Desktop Sidebar ── */}
       <aside
         className={cn(
-          'hidden md:flex flex-col border-r border-border bg-card transition-all duration-200 ease-in-out shrink-0',
+          'hidden md:flex flex-col border-r border-border bg-card transition-all duration-200 relative shrink-0',
           collapsed ? 'w-16' : 'w-60'
         )}
       >
         {SidebarContent}
-        {/* Collapse toggle */}
+
+        {/* Collapse toggle button */}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="absolute left-0 hidden md:flex items-center justify-center h-6 w-6 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground shadow-xs transition-all duration-150 hover:shadow-sm"
-          style={{ bottom: '5.5rem', left: collapsed ? '3rem' : '14rem' }}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-xs hover:text-foreground transition-colors"
         >
           {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
         </button>
       </aside>
 
-      {/* ── Mobile Drawer Overlay ── */}
+      {/* ── Mobile Drawer ── */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-50 flex md:hidden">
           <div
-            className="absolute inset-0 bg-background/80 backdrop-blur-xs"
+            className="fixed inset-0 bg-background/80 backdrop-blur-xs"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-card border-r border-border z-50 flex flex-col">
+          <aside className="relative flex flex-col w-72 max-w-xs border-r border-border bg-card shadow-xl z-10">
             <button
-              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground"
               onClick={() => setMobileOpen(false)}
+              className="absolute right-3 top-4 rounded-md p-1 text-muted-foreground hover:text-foreground"
             >
-              <X className="h-4 w-4" />
+              <X className="h-5 w-5" />
             </button>
             {SidebarContent}
           </aside>
@@ -205,7 +219,7 @@ export const DashboardLayout: React.FC = () => {
       {/* ── Main Content Area ── */}
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-sm px-4 sm:px-6">
+        <header className="flex h-14 shrink-0 items-center gap-4 border-b border-border bg-card/80 backdrop-blur-xs px-4 sm:px-6">
           {/* Mobile menu button */}
           <button
             className="md:hidden text-muted-foreground hover:text-foreground transition-colors"
@@ -235,6 +249,17 @@ export const DashboardLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Sign Out Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+        variant="destructive"
+        title="Sign out?"
+        description="Are you sure you want to sign out? You will need to log in again to access your dashboard and emails."
+        confirmLabel="Sign out"
+      />
     </div>
   );
 };

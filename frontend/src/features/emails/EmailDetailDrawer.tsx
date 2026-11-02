@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 
 import { emailApi } from '@/lib/api';
+import { getErrorMessage } from '@/lib/api-client';
 import { formatFullDateTime, formatBytes } from '@/lib/formatters';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -57,6 +58,9 @@ export const EmailDetailDrawer: React.FC<EmailDetailDrawerProps> = ({
       void qc.invalidateQueries({ queryKey: ['emails'] });
       toast.success(updated.is_starred ? 'Email starred' : 'Email unstarred');
     },
+    onError: (err) => {
+      toast.error(getErrorMessage(err) || 'Failed to update email star status.');
+    },
   });
 
   const toggleReadMutation = useMutation({
@@ -67,6 +71,9 @@ export const EmailDetailDrawer: React.FC<EmailDetailDrawerProps> = ({
       void qc.invalidateQueries({ queryKey: ['emails'] });
       void qc.invalidateQueries({ queryKey: ['emails-unread-count'] });
       toast.success(updated.is_read ? 'Marked as read' : 'Marked as unread');
+    },
+    onError: (err) => {
+      toast.error(getErrorMessage(err) || 'Failed to update email read status.');
     },
   });
 
@@ -102,6 +109,7 @@ export const EmailDetailDrawer: React.FC<EmailDetailDrawerProps> = ({
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                   onClick={() => toggleStarMutation.mutate(!email.is_starred)}
+                  disabled={toggleStarMutation.isPending}
                   title={email.is_starred ? 'Unstar' : 'Star'}
                 >
                   <Star className={cn('h-4 w-4', email.is_starred && 'fill-current')} />
@@ -112,6 +120,7 @@ export const EmailDetailDrawer: React.FC<EmailDetailDrawerProps> = ({
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-foreground"
                   onClick={() => toggleReadMutation.mutate(!email.is_read)}
+                  disabled={toggleReadMutation.isPending}
                   title={email.is_read ? 'Mark as unread' : 'Mark as read'}
                 >
                   {email.is_read ? (
@@ -126,7 +135,7 @@ export const EmailDetailDrawer: React.FC<EmailDetailDrawerProps> = ({
 
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
             title="Close (Esc)"
           >
             <X className="h-4 w-4" />
@@ -165,69 +174,55 @@ export const EmailDetailDrawer: React.FC<EmailDetailDrawerProps> = ({
               )}
             </div>
 
-            {/* Sender / Metadata Card */}
-            <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-              <div className="flex items-start gap-3.5">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-bold text-white shadow-xs">
-                  {initials}
+            {/* Sender / Recipients Info Card */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500/20 to-violet-500/20 text-sm font-bold text-primary">
+                    {initials}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{senderName}</p>
+                    {senderEmail && (
+                      <p className="text-xs text-muted-foreground truncate">{senderEmail}</p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-foreground truncate">
-                      {senderName}
-                    </span>
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                      <Calendar className="h-3.5 w-3.5" />
-                      <span>{formatFullDateTime(email.received_at)}</span>
-                    </div>
-                  </div>
-
-                  {senderEmail && (
-                    <p className="text-xs text-muted-foreground truncate">
-                      &lt;{senderEmail}&gt;
-                    </p>
-                  )}
+                <div className="flex items-center gap-1 shrink-0 text-xs text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{formatFullDateTime(email.received_at)}</span>
                 </div>
               </div>
 
-              {/* Collapsible Recipient Details */}
-              <div className="pt-2 border-t border-border/50 text-xs text-muted-foreground space-y-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span className="font-medium text-foreground">To:</span>
-                    <span className="truncate">
-                      {email.recipients?.length ? email.recipients.join(', ') : 'Me'}
-                    </span>
-                  </div>
-
-                  {Boolean((email.cc && email.cc.length > 0) || (email.bcc && email.bcc.length > 0)) && (
-                    <button
-                      onClick={() => setShowRecipientDetails((prev) => !prev)}
-                      className="text-[11px] text-primary hover:underline flex items-center gap-1 shrink-0 ml-2 font-medium"
-                    >
-                      {showRecipientDetails ? 'Hide details' : 'Show details'}
-                      {showRecipientDetails ? (
-                        <ChevronUp className="h-3 w-3" />
-                      ) : (
-                        <ChevronDown className="h-3 w-3" />
-                      )}
-                    </button>
+              {/* Recipients Toggle */}
+              <div>
+                <button
+                  onClick={() => setShowRecipientDetails((prev) => !prev)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <span>To: {email.recipients?.join(', ') || 'me'}</span>
+                  {showRecipientDetails ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
                   )}
-                </div>
+                </button>
 
                 {showRecipientDetails && (
-                  <div className="space-y-1 pt-1.5 pl-5 border-l-2 border-border mt-1.5 animate-in fade-in-50 duration-150">
+                  <div className="mt-2 space-y-1 rounded-lg bg-background p-2.5 text-xs text-muted-foreground border border-border">
+                    <div>
+                      <strong className="text-foreground">To:</strong>{' '}
+                      {email.recipients?.join(', ') || 'None'}
+                    </div>
                     {email.cc && email.cc.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-foreground">Cc:</span>
-                        <span className="truncate">{email.cc.join(', ')}</span>
+                      <div>
+                        <strong className="text-foreground">Cc:</strong> {email.cc.join(', ')}
                       </div>
                     )}
                     {email.bcc && email.bcc.length > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-foreground">Bcc:</span>
-                        <span className="truncate">{email.bcc.join(', ')}</span>
+                      <div>
+                        <strong className="text-foreground">Bcc:</strong> {email.bcc.join(', ')}
                       </div>
                     )}
                   </div>
@@ -235,65 +230,47 @@ export const EmailDetailDrawer: React.FC<EmailDetailDrawerProps> = ({
               </div>
             </div>
 
-            {/* Email Message Content inside sandboxed iframe with image security banner */}
-            <div className="pt-1">
-              <EmailBodyIframe
-                bodyHtml={email.body_html}
-                bodyText={email.body_text}
-              />
-            </div>
-
             {/* Attachments Section */}
-            {hasAttachments && email.attachments && (
-              <div className="pt-4 border-t border-border/60 space-y-3">
-                <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                  <Paperclip className="h-4 w-4 text-primary" />
-                  <span>Attachments ({email.attachments.length})</span>
+            {hasAttachments && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  <span>Attachments ({email.attachments!.length})</span>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {email.attachments.map((att, idx) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {email.attachments!.map((att, idx) => (
                     <div
                       key={idx}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 shadow-2xs hover:bg-muted/40 transition-colors"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-2.5 text-xs"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <FileText className="h-4 w-4" />
-                        </div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate">
-                            {att.filename}
-                          </p>
-                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                            <span>{formatBytes(att.size)}</span>
-                            {att.mime_type && (
-                              <>
-                                <span>·</span>
-                                <span className="font-mono truncate max-w-[100px]">
-                                  {att.mime_type}
-                                </span>
-                              </>
-                            )}
-                          </div>
+                          <p className="font-medium text-foreground truncate">{att.filename}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatBytes(att.size)}</p>
                         </div>
                       </div>
-
                       <Button
                         variant="ghost"
-                        size="sm"
-                        disabled
-                        className="h-7 px-2 text-[11px] text-muted-foreground shrink-0 cursor-not-allowed"
-                        title="Download (coming soon)"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                        title="Download attachment"
                       >
-                        <Download className="h-3 w-3 mr-1" />
-                        Download
+                        <Download className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* Email Body Content */}
+            <div className="rounded-xl border border-border bg-card p-4 overflow-hidden">
+              <EmailBodyIframe
+                bodyHtml={email.body_html}
+                bodyText={email.body_text}
+              />
+            </div>
           </div>
         )}
       </aside>
